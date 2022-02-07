@@ -7,7 +7,7 @@ require 'pipeline'
 
 --require "love.timer"
 
-love.filesystem.setRequirePath("?.lua;?/init.lua;scenes/empty_mt/?.lua")
+love.filesystem.setRequirePath("?.lua;?/init.lua;scenes/colored_text_transform_mt/?.lua")
 local i18n = require "i18n"
 --local colorize = require 'ansicolors2'.ansicolors
 --local format = string.format
@@ -58,7 +58,7 @@ local function init()
     print("translated", i18n.translate('welcome'))
     print("translated", i18n('welcome'))
 
-    local rendercode = [[
+    pipeline:pushCode('text', [[
     while true do
         local w, h = love.graphics.getDimensions()
         local x, y = math.random() * w, math.random() * h
@@ -67,10 +67,9 @@ local function init()
 
         coroutine.yield()
     end
-    ]]
-    pipeline:pushCode('text', rendercode)
+    ]])
 
-    rendercode = [[
+    pipeline:pushCode('circle_under_mouse', [[
     while true do
         local y = graphic_command_channel:demand()
         local x = graphic_command_channel:demand()
@@ -80,8 +79,7 @@ local function init()
 
         coroutine.yield()
     end
-    ]]
-    pipeline:pushCode('circle_under_mouse', rendercode)
+    ]])
 
     -- Допустимо-ли переопределение функций? Или добавить специальный флаг?
     -- Нормально-ли использовать константы?
@@ -93,18 +91,53 @@ local function init()
     end
     ]])
 
-    --[[
-    -- Добавлять-ли такую функцию? Будет использоваться?
-    -- Стоимость реализации и возможности применения.
-    pipeline:pushCodes({
-        { 
-            'text',
-            'code',
-        },
-        {},
-        {},
-    })
-    --]]
+    pipeline:pushCode('transformed_text', [[
+
+    --pcall(function()
+        --local makeDescentColorText = require 'colored_text'.makeDescentColorText
+    --end)
+
+    local makeDescentColorText = require 'colored_text'.makeDescentColorText
+
+    --local font = love.graphics.newFont(96)
+    local font = love.graphics.newFont(300)
+    local tobject = love.graphics.newText(font)
+
+    local x, y = 0, 0
+    makeDescentColorText(
+        tobject, 
+        'hippopotamus',
+        {1, 0, 0, 1}, 
+        {0.5, 0.7, 0, 1}, 
+        x, y)
+
+    --coroutine.yield()
+    --makeDescentColorText(tobject, "hippopotamus", {1, 1, 1, 1}, {0.5, 0, 0, 1})
+
+    local x, y = 256, 256
+    local width, height = 256, 256
+
+    while true do
+        local angle = love.timer.getTime()
+        local scale = math.sin(love.timer.getTime())
+        
+        love.graphics.push()
+
+        love.graphics.translate(x, y)
+        love.graphics.rotate(angle)
+        love.graphics.translate(-width / 2, -height / 2)
+
+        love.graphics.scale(scale, scale)
+
+        love.graphics.setFont(font)
+        love.graphics.setColor {1, 1, 1, 1}
+        love.graphics.draw(tobject)
+
+        love.graphics.pop()
+
+        coroutine.yield()
+    end
+    ]])
 
     last_render = love.timer.getTime()
 end
@@ -112,17 +145,17 @@ end
 local function render()
     pipeline:openAndClose('clear')
 
-    pipeline:open('text')
-    pipeline:close()
+    --pipeline:openAndClose('text')
 
     local x, y = love.mouse.getPosition()
-    print('mouse x, y', x, y)
+    --print('mouse x, y', x, y)
     local rad = 50
-    pipeline:open('circle_under_mouse')
-    pipeline:push(y)
-    pipeline:push(x)
-    pipeline:push(rad)
-    pipeline:close()
+
+    --pipeline:open('circle_under_mouse')
+    --pipeline:push(y, x, rad)
+    --pipeline:close()
+
+    pipeline:openAndClose('transformed_text')
 
     pipeline:sync()
 end
