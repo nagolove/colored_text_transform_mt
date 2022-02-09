@@ -1,40 +1,18 @@
 local _tl_compat; if (tonumber((_VERSION or ''):match('[%d.]*$')) or 0) < 5.3 then local p, m = pcall(require, 'compat53.module'); if p then _tl_compat = m end end; local ipairs = _tl_compat and _tl_compat.ipairs or ipairs; local math = _tl_compat and _tl_compat.math or math; print('hello. I scene from separated thread')
 
-
+local inspect = require('inspect')
 require("love")
 require("love_inc").require_pls_nographic()
 require('pipeline')
 
-
-
-love.filesystem.setRequirePath("?.lua;?/init.lua;scenes/colored_text_transform_mt/?.lua")
-local i18n = require("i18n")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+love.filesystem.setRequirePath("?.lua;?/init.lua;scenes/textured_quad/?.lua")
 
 local event_channel = love.thread.getChannel("event_channel")
 
-
-
-
-local mx, my = 0, 0
-
 local last_render
 
-local pipeline = Pipeline.new()
+local SCENE_PREFIX = 'scenes/textured_quad'
+local pipeline = Pipeline.new(SCENE_PREFIX)
 
 
 
@@ -44,19 +22,6 @@ local pipeline = Pipeline.new()
 
 
 local function init()
-   i18n.set('en.welcome', 'welcome to this program')
-   i18n.load({
-      en = {
-         good_bye = "good-bye!",
-         age_msg = "your age is %{age}.",
-         phone_msg = {
-            one = "you have one new message.",
-            other = "you have %{count} new messages.",
-         },
-      },
-   })
-   print("translated", i18n.translate('welcome'))
-   print("translated", i18n('welcome'))
 
    pipeline:pushCode('text', [[
     while true do
@@ -91,47 +56,31 @@ local function init()
     end
     ]])
 
-   pipeline:pushCode('transformed_text', [[
+   pipeline:pushCode('textured_quad', [[
 
-    --pcall(function()
-        --local makeDescentColorText = require 'colored_text'.makeDescentColorText
-    --end)
+    local path = SCENE_PREFIX .. '/tex.png'
+    print('path', path)
+    local tex = love.graphics.newImage(path)
 
-    local makeDescentColorText = require 'colored_text'.makeDescentColorText
-
-    --local font = love.graphics.newFont(96)
-    local font = love.graphics.newFont(300)
-    local tobject = love.graphics.newText(font)
-
-    local x, y = 0, 0
-    makeDescentColorText(
-        tobject, 
-        'hippopotamus',
-        {1, 0, 0, 1}, 
-        {0.5, 0.7, 0, 1}, 
-        x, y)
-
-    --coroutine.yield()
-    --makeDescentColorText(tobject, "hippopotamus", {1, 1, 1, 1}, {0.5, 0, 0, 1})
-
-    local x, y = 256, 256
-    local width, height = 256, 256
+    local x, y = 100, 100
+    local width, height = tex:getDimensions()
+    local scale = 1
+    print('width, height', width, height)
+    local quad = love.graphics.newQuad(0, 0, 100, 100, width, height)
 
     while true do
-        local angle = love.timer.getTime()
-        local scale = math.sin(love.timer.getTime())
+        --local angle = love.timer.getTime()
+        --local scale = math.sin(love.timer.getTime())
         
         love.graphics.push()
 
-        love.graphics.translate(x, y)
-        love.graphics.rotate(angle)
-        love.graphics.translate(-width / 2, -height / 2)
+        --love.graphics.translate(x, y)
+        --love.graphics.rotate(angle)
+        --love.graphics.translate(-width / 2, -height / 2)
+        --love.graphics.scale(scale, scale)
 
-        love.graphics.scale(scale, scale)
-
-        love.graphics.setFont(font)
         love.graphics.setColor {1, 1, 1, 1}
-        love.graphics.draw(tobject)
+        love.graphics.draw(tex, quad, 0, 0)
 
         love.graphics.pop()
 
@@ -139,25 +88,109 @@ local function init()
     end
     ]])
 
+   pipeline:pushCode('border', [[
+    local yield = coroutine.yield
+    local gr = love.graphics
+    local newlwidth = 5
+    local inspect = require 'inspect'
+    --local color = {0.5, 0.5, 0.5, 1}
+    local color = {0, 0, 0, 1}
+
+    while true do
+        local lwidth = gr.getLineWidth()
+
+        --local x, y, w, h = 0, 0, 100, 100
+        local x = graphic_command_channel:demand()
+        local y = graphic_command_channel:demand()
+        local w = graphic_command_channel:demand()
+        local h = graphic_command_channel:demand()
+
+        print('x, y, w, h', 
+            inspect(x),
+            inspect(y),
+            inspect(w),
+            inspect(h)
+        )
+
+        gr.setColor(color)
+        gr.setLineWidth(newlwidth)
+        gr.rectangle('line', x, y, w, h)
+        gr.setLineWidth(lwidth)
+        yield()
+    end
+    ]])
+
    last_render = love.timer.getTime()
 end
+
+local SelectionState = {}
+
+
+
+
+local BorderStart = {}
+
+
+
+
+local BorderEnd = {}
+
+
+
+
+local state = 'unpressed'
+local border_start = {}
+local border_end = {
+   w = 0,
+   h = 0,
+}
 
 local function render()
    pipeline:openAndClose('clear')
 
-
-
-   local x, y = love.mouse.getPosition()
-
-   local rad = 50
+   pipeline:open('textured_quad')
+   pipeline:close()
 
 
 
 
 
-   pipeline:openAndClose('transformed_text')
+
+
+   if state == 'pressed' then
+
+
+      pipeline:open('border')
+      pipeline:push(
+      border_start.x,
+      border_start.y,
+      border_end.w,
+      border_end.h)
+
+      pipeline:close()
+
+      print('render border',
+      border_start.x,
+      border_start.y,
+      border_end.w,
+      border_end.h)
+
+   end
 
    pipeline:sync()
+end
+
+local function process_border()
+   if state == 'pressed' then
+      local mx, my = love.mouse.getPosition()
+      local abs = math.abs
+      print('border_end', border_end.w, border_end.h)
+      border_end.w, border_end.h = abs(mx - border_start.x), abs(my - border_start.y)
+   elseif state == 'unpressed' then
+      state = 'pressed'
+      print('border_start', inspect(border_start))
+      border_start.x, border_start.y = love.mouse.getPosition()
+   end
 end
 
 local function mainloop()
@@ -168,8 +201,8 @@ local function mainloop()
          for _, e in ipairs(events) do
             local evtype = (e)[1]
             if evtype == "mousemoved" then
-               mx = math.floor((e)[2])
-               my = math.floor((e)[3])
+
+
             elseif evtype == "keypressed" then
                local key = (e)[2]
                local scancode = (e)[3]
@@ -180,6 +213,9 @@ local function mainloop()
             elseif evtype == "mousepressed" then
 
 
+
+
+               process_border()
 
 
 
